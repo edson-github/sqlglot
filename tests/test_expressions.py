@@ -18,7 +18,7 @@ class TestExpressions(unittest.TestCase):
         self.assertEqual([exp.Literal.number(1), exp.Literal.number(2)], list(parse_one("[1, 2]")))
 
         with self.assertRaises(TypeError):
-            for x in parse_one("1"):
+            for _ in parse_one("1"):
                 pass
 
     def test_eq(self):
@@ -441,9 +441,7 @@ class TestExpressions(unittest.TestCase):
         expression = parse_one("a")
 
         def fun(node, alias_=True):
-            if alias_:
-                return parse_one("a AS a")
-            return node
+            return parse_one("a AS a") if alias_ else node
 
         transformed_expression = expression.transform(fun)
         self.assertEqual(transformed_expression.sql(dialect="presto"), "a AS a")
@@ -491,9 +489,7 @@ class TestExpressions(unittest.TestCase):
         expression = parse_one("SELECT a, b FROM x")
 
         def remove_column_b(node):
-            if isinstance(node, exp.Column) and node.name == "b":
-                return None
-            return node
+            return None if isinstance(node, exp.Column) and node.name == "b" else node
 
         self.assertEqual(expression.transform(remove_column_b).sql(), "SELECT a FROM x")
         self.assertEqual(expression.transform(lambda _: None), None)
@@ -501,18 +497,14 @@ class TestExpressions(unittest.TestCase):
         expression = parse_one("CAST(x AS FLOAT)")
 
         def remove_non_list_arg(node):
-            if isinstance(node, exp.DataType):
-                return None
-            return node
+            return None if isinstance(node, exp.DataType) else node
 
         self.assertEqual(expression.transform(remove_non_list_arg).sql(), "CAST(x AS)")
 
         expression = parse_one("SELECT a, b FROM x")
 
         def remove_all_columns(node):
-            if isinstance(node, exp.Column):
-                return None
-            return node
+            return None if isinstance(node, exp.Column) else node
 
         self.assertEqual(expression.transform(remove_all_columns).sql(), "SELECT FROM x")
 

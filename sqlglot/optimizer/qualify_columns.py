@@ -90,8 +90,7 @@ def _pop_table_column_aliases(derived_tables: t.List[exp.CTE | exp.Subquery]) ->
     For example, `col1` and `col2` will be dropped in SELECT ... FROM (SELECT ...) AS foo(col1, col2)
     """
     for derived_table in derived_tables:
-        table_alias = derived_table.args.get("alias")
-        if table_alias:
+        if table_alias := derived_table.args.get("alias"):
             table_alias.args.pop("columns", None)
 
 
@@ -307,10 +306,7 @@ def _qualify_columns(scope: Scope, resolver: Resolver) -> None:
                 column.set("table", exp.to_identifier(scope.pivots[0].alias))
                 continue
 
-            column_table = resolver.get_table(column_name)
-
-            # column_table can be a '' because bigquery unnest has no table alias
-            if column_table:
+            if column_table := resolver.get_table(column_name):
                 column.set("table", column_table)
         elif column_table not in scope.sources and (
             not scope.parent
@@ -335,8 +331,7 @@ def _qualify_columns(scope: Scope, resolver: Resolver) -> None:
     for pivot in scope.pivots:
         for column in pivot.find_all(exp.Column):
             if not column.table and column.name in resolver.all_columns:
-                column_table = resolver.get_table(column.name)
-                if column_table:
+                if column_table := resolver.get_table(column.name):
                     column.set("table", column_table)
 
 
@@ -360,7 +355,7 @@ def _expand_stars(
 
     has_pivoted_source = pivot and not pivot.args.get("unpivot")
     if pivot and has_pivoted_source:
-        pivot_columns = set(col.output_name for col in pivot.find_all(exp.Column))
+        pivot_columns = {col.output_name for col in pivot.find_all(exp.Column)}
 
         pivot_output_columns = [col.output_name for col in pivot.args.get("columns", [])]
         if not pivot_output_columns:
@@ -388,44 +383,43 @@ def _expand_stars(
             if pseudocolumns:
                 columns = [name for name in columns if name.upper() not in pseudocolumns]
 
-            if columns and "*" not in columns:
-                table_id = id(table)
-                columns_to_exclude = except_columns.get(table_id) or set()
-
-                if pivot and has_pivoted_source and pivot_columns and pivot_output_columns:
-                    implicit_columns = [col for col in columns if col not in pivot_columns]
-                    new_selections.extend(
-                        exp.alias_(exp.column(name, table=pivot.alias), name, copy=False)
-                        for name in implicit_columns + pivot_output_columns
-                        if name not in columns_to_exclude
-                    )
-                    continue
-
-                for name in columns:
-                    if name in using_column_tables and table in using_column_tables[name]:
-                        if name in coalesced_columns:
-                            continue
-
-                        coalesced_columns.add(name)
-                        tables = using_column_tables[name]
-                        coalesce = [exp.column(name, table=table) for table in tables]
-
-                        new_selections.append(
-                            alias(
-                                exp.Coalesce(this=coalesce[0], expressions=coalesce[1:]),
-                                alias=name,
-                                copy=False,
-                            )
-                        )
-                    elif name not in columns_to_exclude:
-                        alias_ = replace_columns.get(table_id, {}).get(name, name)
-                        column = exp.column(name, table=table)
-                        new_selections.append(
-                            alias(column, alias_, copy=False) if alias_ != name else column
-                        )
-            else:
+            if not columns or "*" in columns:
                 return
 
+            table_id = id(table)
+            columns_to_exclude = except_columns.get(table_id) or set()
+
+            if pivot and has_pivoted_source and pivot_columns and pivot_output_columns:
+                implicit_columns = [col for col in columns if col not in pivot_columns]
+                new_selections.extend(
+                    exp.alias_(exp.column(name, table=pivot.alias), name, copy=False)
+                    for name in implicit_columns + pivot_output_columns
+                    if name not in columns_to_exclude
+                )
+                continue
+
+            for name in columns:
+                if name in using_column_tables and table in using_column_tables[name]:
+                    if name in coalesced_columns:
+                        continue
+
+                    coalesced_columns.add(name)
+                    tables = using_column_tables[name]
+                    coalesce = [exp.column(name, table=table) for table in tables]
+
+                    new_selections.append(
+                        alias(
+                            exp.Coalesce(this=coalesce[0], expressions=coalesce[1:]),
+                            alias=name,
+                            copy=False,
+                        )
+                    )
+                elif name not in columns_to_exclude:
+                    alias_ = replace_columns.get(table_id, {}).get(name, name)
+                    column = exp.column(name, table=table)
+                    new_selections.append(
+                        alias(column, alias_, copy=False) if alias_ != name else column
+                    )
     # Ensures we don't overwrite the initial selections with an empty list
     if new_selections:
         scope.expression.set("expressions", new_selections)
@@ -576,8 +570,7 @@ class Resolver:
             while node and node.alias != table_name:
                 node = node.parent
 
-        node_alias = node.args.get("alias")
-        if node_alias:
+        if node_alias := node.args.get("alias"):
             return exp.to_identifier(node_alias.this)
 
         return exp.to_identifier(table_name)

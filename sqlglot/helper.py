@@ -31,8 +31,8 @@ class AutoName(Enum):
     Reference: https://docs.python.org/3/howto/enum.html#using-automatic-values
     """
 
-    def _generate_next_value_(name, _start, _count, _last_values):
-        return name
+    def _generate_next_value_(self, _start, _count, _last_values):
+        return self
 
 
 class classproperty(property):
@@ -74,10 +74,7 @@ def ensure_list(value):
     """
     if value is None:
         return []
-    if isinstance(value, (list, tuple)):
-        return list(value)
-
-    return [value]
+    return list(value) if isinstance(value, (list, tuple)) else [value]
 
 
 @t.overload
@@ -236,7 +233,7 @@ def tsort(dag: t.Dict[T, t.Set[T]]) -> t.List[T]:
 
     for node, deps in tuple(dag.items()):
         for dep in deps:
-            if not dep in dag:
+            if dep not in dag:
                 dag[dep] = set()
 
     while dag:
@@ -436,7 +433,7 @@ def dict_depth(d: t.Dict) -> int:
 
 def first(it: t.Iterable[T]) -> T:
     """Returns the first element from an iterable (useful for sets)."""
-    return next(i for i in it)
+    return next(iter(it))
 
 
 def merge_ranges(ranges: t.List[t.Tuple[A, A]]) -> t.List[t.Tuple[A, A]]:

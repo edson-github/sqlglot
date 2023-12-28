@@ -51,10 +51,7 @@ def normalize(expression: exp.Expression, dnf: bool = False, max_distance: int =
             except OptimizeError as e:
                 logger.info(e)
                 node.replace(original)
-                if root:
-                    return original
-                return expression
-
+                return original if root else expression
             if root:
                 expression = node
 

@@ -353,13 +353,12 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
                     if not values:
                         continue
 
-                    selects[name] = {
-                        alias: column
-                        for alias, column in zip(
+                    selects[name] = dict(
+                        zip(
                             source.expression.alias_column_names,
                             values,
                         )
-                    }
+                    )
                 else:
                     selects[name] = {
                         select.alias_or_name: select for select in source.expression.selects

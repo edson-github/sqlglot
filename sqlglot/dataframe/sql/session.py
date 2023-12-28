@@ -143,7 +143,7 @@ class SparkSession:
 
     @property
     def _random_id(self) -> str:
-        id = "r" + uuid.uuid4().hex
+        id = f"r{uuid.uuid4().hex}"
         self.known_ids.add(id)
         return id
 

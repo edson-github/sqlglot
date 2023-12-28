@@ -486,40 +486,40 @@ def simplify_equality(expression: exp.Expression) -> exp.Expression:
         x + 1 = 3
         a   b
     """
-    if isinstance(expression, COMPARISONS):
-        l, r = expression.left, expression.right
+    if not isinstance(expression, COMPARISONS):
+        return expression
+    l, r = expression.left, expression.right
 
-        if not l.__class__ in INVERSE_OPS:
-            return expression
+    if l.__class__ not in INVERSE_OPS:
+        return expression
 
-        if r.is_number:
-            a_predicate = _is_number
-            b_predicate = _is_number
-        elif _is_date_literal(r):
-            a_predicate = _is_date_literal
-            b_predicate = _is_interval
-        else:
-            return expression
+    if r.is_number:
+        a_predicate = _is_number
+        b_predicate = _is_number
+    elif _is_date_literal(r):
+        a_predicate = _is_date_literal
+        b_predicate = _is_interval
+    else:
+        return expression
 
-        if l.__class__ in INVERSE_DATE_OPS:
-            l = t.cast(exp.IntervalOp, l)
-            a = l.this
-            b = l.interval()
-        else:
-            l = t.cast(exp.Binary, l)
-            a, b = l.left, l.right
+    if l.__class__ in INVERSE_DATE_OPS:
+        l = t.cast(exp.IntervalOp, l)
+        a = l.this
+        b = l.interval()
+    else:
+        l = t.cast(exp.Binary, l)
+        a, b = l.left, l.right
 
-        if not a_predicate(a) and b_predicate(b):
-            pass
-        elif not a_predicate(b) and b_predicate(a):
-            a, b = b, a
-        else:
-            return expression
+    if not a_predicate(a) and b_predicate(b):
+        pass
+    elif not a_predicate(b) and b_predicate(a):
+        a, b = b, a
+    else:
+        return expression
 
-        return expression.__class__(
-            this=a, expression=INVERSE_OPS[l.__class__](this=r, expression=b)
-        )
-    return expression
+    return expression.__class__(
+        this=a, expression=INVERSE_OPS[l.__class__](this=r, expression=b)
+    )
 
 
 def simplify_literals(expression, root=True):
@@ -577,14 +577,10 @@ def _simplify_binary(expression, a, b):
                 return None
             return exp.Literal.number(num_a / num_b)
 
-        boolean = eval_boolean(expression, num_a, num_b)
-
-        if boolean:
+        if boolean := eval_boolean(expression, num_a, num_b):
             return boolean
     elif a.is_string and b.is_string:
-        boolean = eval_boolean(expression, a.this, b.this)
-
-        if boolean:
+        if boolean := eval_boolean(expression, a.this, b.this):
             return boolean
     elif _is_date_literal(a) and isinstance(b, exp.Interval):
         a, b = extract_date(a), extract_interval(b)
@@ -601,8 +597,7 @@ def _simplify_binary(expression, a, b):
     elif _is_date_literal(a) and _is_date_literal(b):
         if isinstance(expression, exp.Predicate):
             a, b = extract_date(a), extract_date(b)
-            boolean = eval_boolean(expression, a, b)
-            if boolean:
+            if boolean := eval_boolean(expression, a, b):
                 return boolean
 
     return None
@@ -790,11 +785,7 @@ def _datetrunc_range(date: datetime.date, unit: str, dialect: Dialect) -> t.Opti
     """
     floor = date_floor(date, unit, dialect)
 
-    if date != floor:
-        # This will always be False, except for NULL values.
-        return None
-
-    return floor, floor + interval(unit)
+    return None if date != floor else (floor, floor + interval(unit))
 
 
 def _datetrunc_eq_expression(left: exp.Expression, drange: DateRange) -> exp.Expression:
@@ -810,24 +801,20 @@ def _datetrunc_eq(
     left: exp.Expression, date: datetime.date, unit: str, dialect: Dialect
 ) -> t.Optional[exp.Expression]:
     drange = _datetrunc_range(date, unit, dialect)
-    if not drange:
-        return None
-
-    return _datetrunc_eq_expression(left, drange)
+    return None if not drange else _datetrunc_eq_expression(left, drange)
 
 
 def _datetrunc_neq(
     left: exp.Expression, date: datetime.date, unit: str, dialect: Dialect
 ) -> t.Optional[exp.Expression]:
-    drange = _datetrunc_range(date, unit, dialect)
-    if not drange:
+    if drange := _datetrunc_range(date, unit, dialect):
+        return exp.and_(
+            left < date_literal(drange[0]),
+            left >= date_literal(drange[1]),
+            copy=False,
+        )
+    else:
         return None
-
-    return exp.and_(
-        left < date_literal(drange[0]),
-        left >= date_literal(drange[1]),
-        copy=False,
-    )
 
 
 DATETRUNC_BINARY_COMPARISONS: t.Dict[t.Type[exp.Expression], DateTruncBinaryTransform] = {
@@ -867,12 +854,11 @@ def simplify_datetrunc(expression: exp.Expression, dialect: Dialect) -> exp.Expr
 
         l = t.cast(exp.DateTrunc, l)
         unit = l.unit.name.lower()
-        date = extract_date(r)
-
-        if not date:
+        if date := extract_date(r):
+            return DATETRUNC_BINARY_COMPARISONS[comparison](l.this, date, unit, dialect) or expression
+        else:
             return expression
 
-        return DATETRUNC_BINARY_COMPARISONS[comparison](l.this, date, unit, dialect) or expression
     elif isinstance(expression, exp.In):
         l = expression.this
         rs = expression.expressions
@@ -886,8 +872,7 @@ def simplify_datetrunc(expression: exp.Expression, dialect: Dialect) -> exp.Expr
                 date = extract_date(r)
                 if not date:
                     return expression
-                drange = _datetrunc_range(date, unit, dialect)
-                if drange:
+                if drange := _datetrunc_range(date, unit, dialect):
                     ranges.append(drange)
 
             if not ranges:
@@ -977,9 +962,7 @@ def eval_boolean(expression, a, b):
         return boolean_literal(a >= b)
     if isinstance(expression, exp.LT):
         return boolean_literal(a < b)
-    if isinstance(expression, exp.LTE):
-        return boolean_literal(a <= b)
-    return None
+    return boolean_literal(a <= b) if isinstance(expression, exp.LTE) else None
 
 
 def cast_as_date(value: t.Any) -> t.Optional[datetime.date]:
@@ -1102,10 +1085,7 @@ def date_floor(d: datetime.date, unit: str, dialect: Dialect) -> datetime.date:
 def date_ceil(d: datetime.date, unit: str, dialect: Dialect) -> datetime.date:
     floor = date_floor(d, unit, dialect)
 
-    if floor == d:
-        return d
-
-    return floor + interval(unit)
+    return d if floor == d else floor + interval(unit)
 
 
 def boolean_literal(condition):

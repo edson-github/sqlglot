@@ -67,18 +67,15 @@ class NormalizationStrategy(str, AutoName):
 class _Dialect(type):
     classes: t.Dict[str, t.Type[Dialect]] = {}
 
-    def __eq__(cls, other: t.Any) -> bool:
-        if cls is other:
+    def __eq__(self, other: t.Any) -> bool:
+        if self is other:
             return True
         if isinstance(other, str):
-            return cls is cls.get(other)
-        if isinstance(other, Dialect):
-            return cls is type(other)
+            return self is self.get(other)
+        return self is type(other) if isinstance(other, Dialect) else False
 
-        return False
-
-    def __hash__(cls) -> int:
-        return hash(cls.__name__.lower())
+    def __hash__(self) -> int:
+        return hash(self.__name__.lower())
 
     @classmethod
     def __getitem__(cls, key: str) -> t.Type[Dialect]:
@@ -303,11 +300,11 @@ class Dialect(metaclass=_Dialect):
                     "Please use the correct format: 'dialect [, k1 = v2 [, ...]]'."
                 )
 
-            result = cls.get(dialect_name.strip())
-            if not result:
-                raise ValueError(f"Unknown dialect '{dialect_name}'.")
+            if result := cls.get(dialect_name.strip()):
+                return result(**kwargs)
 
-            return result(**kwargs)
+            else:
+                raise ValueError(f"Unknown dialect '{dialect_name}'.")
 
         raise ValueError(f"Invalid dialect type for '{dialect}': '{type(dialect)}'.")
 
@@ -364,10 +361,12 @@ class Dialect(metaclass=_Dialect):
         """
         if (
             isinstance(expression, exp.Identifier)
-            and not self.normalization_strategy is NormalizationStrategy.CASE_SENSITIVE
+            and self.normalization_strategy
+            is not NormalizationStrategy.CASE_SENSITIVE
             and (
                 not expression.quoted
-                or self.normalization_strategy is NormalizationStrategy.CASE_INSENSITIVE
+                or self.normalization_strategy
+                is NormalizationStrategy.CASE_INSENSITIVE
             )
         ):
             expression.set(
@@ -406,10 +405,7 @@ class Dialect(metaclass=_Dialect):
         if identify is True or identify == "always":
             return True
 
-        if identify == "safe":
-            return not self.case_sensitive(text)
-
-        return False
+        return not self.case_sensitive(text) if identify == "safe" else False
 
     def quote_identifier(self, expression: E, identify: bool = True) -> E:
         """
@@ -561,8 +557,7 @@ def no_map_from_entries_sql(self: Generator, expression: exp.MapFromEntries) -> 
 def str_position_sql(self: Generator, expression: exp.StrPosition) -> str:
     this = self.sql(expression, "this")
     substr = self.sql(expression, "substr")
-    position = self.sql(expression, "position")
-    if position:
+    if position := self.sql(expression, "position"):
         return f"STRPOS(SUBSTR({this}, {position}), {substr}) + {position} - 1"
     return f"STRPOS({this}, {substr})"
 
@@ -585,9 +580,7 @@ def var_map_sql(
 
     args = []
     for key, value in zip(keys.expressions, values.expressions):
-        args.append(self.sql(key))
-        args.append(self.sql(value))
-
+        args.extend((self.sql(key), self.sql(value)))
     return self.func(map_func_name, *args)
 
 
@@ -850,8 +843,9 @@ def concat_ws_to_dpipe_sql(self: Generator, expression: exp.ConcatWs) -> str:
 
 
 def regexp_extract_sql(self: Generator, expression: exp.RegexpExtract) -> str:
-    bad_args = list(filter(expression.args.get, ("position", "occurrence", "parameters")))
-    if bad_args:
+    if bad_args := list(
+        filter(expression.args.get, ("position", "occurrence", "parameters"))
+    ):
         self.unsupported(f"REGEXP_EXTRACT does not support the following arg(s): {bad_args}")
 
     return self.func(
@@ -860,10 +854,12 @@ def regexp_extract_sql(self: Generator, expression: exp.RegexpExtract) -> str:
 
 
 def regexp_replace_sql(self: Generator, expression: exp.RegexpReplace) -> str:
-    bad_args = list(
-        filter(expression.args.get, ("position", "occurrence", "parameters", "modifiers"))
-    )
-    if bad_args:
+    if bad_args := list(
+        filter(
+            expression.args.get,
+            ("position", "occurrence", "parameters", "modifiers"),
+        )
+    ):
         self.unsupported(f"REGEXP_REPLACE does not support the following arg(s): {bad_args}")
 
     return self.func(

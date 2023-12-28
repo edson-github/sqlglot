@@ -81,17 +81,14 @@ def pushdown_projections(expression, schema=None, remove_unused_selections=True)
                     columns = selects.get(name) or set()
                     referenced_columns[source].update(columns)
 
-                column_aliases = node.alias_column_names
-                if column_aliases:
+                if column_aliases := node.alias_column_names:
                     source_column_alias_count[source] = len(column_aliases)
 
     return expression
 
 
 def _remove_unused_selections(scope, parent_selections, schema, alias_count):
-    order = scope.expression.args.get("order")
-
-    if order:
+    if order := scope.expression.args.get("order"):
         # Assume columns without a qualified table are references to output columns
         order_refs = {c.name for c in order.find_all(exp.Column) if not c.table}
     else:

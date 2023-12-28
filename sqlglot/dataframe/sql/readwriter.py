@@ -30,9 +30,8 @@ class DataFrameReader:
                 )
             )
             .select(
-                *(
-                    column
-                    for column in sqlglot.schema.column_names(
+                *iter(
+                    sqlglot.schema.column_names(
                         tableName, dialect=SparkSession().dialect
                     )
                 )

@@ -126,8 +126,7 @@ def _date_add_sql(
 
 
 def _ts_or_ds_to_date_sql(self: MySQL.Generator, expression: exp.TsOrDsToDate) -> str:
-    time_format = expression.args.get("format")
-    if time_format:
+    if time_format := expression.args.get("format"):
         return _str_to_date_sql(self, expression)
     return f"DATE({self.sql(expression, 'this')})"
 
@@ -518,13 +517,11 @@ class MySQL(Dialect):
 
             log = self._parse_string() if self._match_text_seq("IN") else None
 
-            if this in ("BINLOG EVENTS", "RELAYLOG EVENTS"):
+            db = None
+            if this in {"BINLOG EVENTS", "RELAYLOG EVENTS"}:
                 position = self._parse_number() if self._match_text_seq("FROM") else None
-                db = None
             else:
                 position = None
-                db = None
-
                 if self._match(TokenType.FROM):
                     db = self._parse_id_var()
                 elif self._match(TokenType.DOT):
@@ -755,9 +752,7 @@ class MySQL(Dialect):
             if expression.to.this in self.TIMESTAMP_FUNC_TYPES:
                 return self.func("TIMESTAMP", expression.this)
 
-            to = self.CAST_MAPPING.get(expression.to.this)
-
-            if to:
+            if to := self.CAST_MAPPING.get(expression.to.this):
                 expression.to.set("this", to)
             return super().cast_sql(expression)
 

@@ -64,9 +64,7 @@ def eliminate_distinct_on(expression: exp.Expression) -> exp.Expression:
         outer_selects = expression.selects
         row_number = find_new_name(expression.named_selects, "_row_number")
         window = exp.Window(this=exp.RowNumber(), partition_by=distinct_cols)
-        order = expression.args.get("order")
-
-        if order:
+        if order := expression.args.get("order"):
             window.set("order", order.pop())
         else:
             window.set("order", exp.Order(expressions=[c.copy() for c in distinct_cols]))
@@ -95,36 +93,37 @@ def eliminate_qualify(expression: exp.Expression) -> exp.Expression:
     if a column is referenced in the QUALIFY clause but is not selected, we need to include it too,
     otherwise we won't be able to refer to it in the outer query's WHERE clause.
     """
-    if isinstance(expression, exp.Select) and expression.args.get("qualify"):
-        taken = set(expression.named_selects)
-        for select in expression.selects:
-            if not select.alias_or_name:
-                alias = find_new_name(taken, "_c")
-                select.replace(exp.alias_(select, alias))
-                taken.add(alias)
+    if not isinstance(expression, exp.Select) or not expression.args.get(
+        "qualify"
+    ):
+        return expression
+    taken = set(expression.named_selects)
+    for select in expression.selects:
+        if not select.alias_or_name:
+            alias = find_new_name(taken, "_c")
+            select.replace(exp.alias_(select, alias))
+            taken.add(alias)
 
-        outer_selects = exp.select(*[select.alias_or_name for select in expression.selects])
-        qualify_filters = expression.args["qualify"].pop().this
+    outer_selects = exp.select(*[select.alias_or_name for select in expression.selects])
+    qualify_filters = expression.args["qualify"].pop().this
 
-        select_candidates = exp.Window if expression.is_star else (exp.Window, exp.Column)
-        for expr in qualify_filters.find_all(select_candidates):
-            if isinstance(expr, exp.Window):
-                alias = find_new_name(expression.named_selects, "_w")
-                expression.select(exp.alias_(expr, alias), copy=False)
-                column = exp.column(alias)
+    select_candidates = exp.Window if expression.is_star else (exp.Window, exp.Column)
+    for expr in qualify_filters.find_all(select_candidates):
+        if isinstance(expr, exp.Window):
+            alias = find_new_name(expression.named_selects, "_w")
+            expression.select(exp.alias_(expr, alias), copy=False)
+            column = exp.column(alias)
 
-                if isinstance(expr.parent, exp.Qualify):
-                    qualify_filters = column
-                else:
-                    expr.replace(column)
-            elif expr.name not in expression.named_selects:
-                expression.select(expr.copy(), copy=False)
+            if isinstance(expr.parent, exp.Qualify):
+                qualify_filters = column
+            else:
+                expr.replace(column)
+        elif expr.name not in expression.named_selects:
+            expression.select(expr.copy(), copy=False)
 
-        return outer_selects.from_(expression.subquery(alias="_t", copy=False), copy=False).where(
-            qualify_filters, copy=False
-        )
-
-    return expression
+    return outer_selects.from_(expression.subquery(alias="_t", copy=False), copy=False).where(
+        qualify_filters, copy=False
+    )
 
 
 def remove_precision_parameterized_types(expression: exp.Expression) -> exp.Expression:
@@ -488,7 +487,7 @@ def preprocess(
         for t in transforms[1:]:
             expression = t(expression)
 
-        _sql_handler = getattr(self, expression.key + "_sql", None)
+        _sql_handler = getattr(self, f"{expression.key}_sql", None)
         if _sql_handler:
             return _sql_handler(expression)
 
