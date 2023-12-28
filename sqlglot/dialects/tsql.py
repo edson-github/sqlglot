@@ -90,9 +90,10 @@ def _parse_format(args: t.List) -> exp.Expression:
     fmt = seq_get(args, 1)
     culture = seq_get(args, 2)
 
-    number_fmt = fmt and (fmt.name in TRANSPILE_SAFE_NUMBER_FMT or not DATE_FMT_RE.search(fmt.name))
-
-    if number_fmt:
+    if number_fmt := fmt and (
+        fmt.name in TRANSPILE_SAFE_NUMBER_FMT
+        or not DATE_FMT_RE.search(fmt.name)
+    ):
         return exp.NumberToStr(this=this, format=fmt, culture=culture)
 
     if fmt:
@@ -162,8 +163,7 @@ def _format_sql(self: TSQL.Generator, expression: exp.NumberToStr | exp.TimeToSt
 
 def _string_agg_sql(self: TSQL.Generator, expression: exp.GroupConcat) -> str:
     this = expression.this
-    distinct = expression.find(exp.Distinct)
-    if distinct:
+    if distinct := expression.find(exp.Distinct):
         # exp.Distinct can appear below an exp.Order or an exp.GroupConcat expression
         self.unsupported("T-SQL STRING_AGG doesn't support DISTINCT.")
         this = distinct.pop().expressions[0]
@@ -703,8 +703,7 @@ class TSQL(Dialect):
         }
 
         def set_operation(self, expression: exp.Union, op: str) -> str:
-            limit = expression.args.get("limit")
-            if limit:
+            if limit := expression.args.get("limit"):
                 return self.sql(expression.limit(limit.pop(), copy=False))
 
             return super().set_operation(expression, op)

@@ -501,8 +501,8 @@ class Generator:
         return f"{self.sep(sep)}{sql}"
 
     def pad_comment(self, comment: str) -> str:
-        comment = " " + comment if comment[0].strip() else comment
-        comment = comment + " " if comment[-1].strip() else comment
+        comment = f" {comment}" if comment[0].strip() else comment
+        comment = f"{comment} " if comment[-1].strip() else comment
         return comment
 
     def maybe_comment(
@@ -556,9 +556,7 @@ class Generator:
     def normalize_func(self, name: str) -> str:
         if self.normalize_functions == "upper" or self.normalize_functions is True:
             return name.upper()
-        if self.normalize_functions == "lower":
-            return name.lower()
-        return name
+        return name.lower() if self.normalize_functions == "lower" else name
 
     def indent(
         self,
@@ -594,11 +592,7 @@ class Generator:
             return expression
 
         if key:
-            value = expression.args.get(key)
-            if value:
-                return self.sql(value)
-            return ""
-
+            return self.sql(value) if (value := expression.args.get(key)) else ""
         transform = self.TRANSFORMS.get(expression.__class__)
 
         if callable(transform):
@@ -764,7 +758,7 @@ class Generator:
         desc = expression.args.get("desc")
         if desc is not None:
             return f"PRIMARY KEY{' DESC' if desc else ' ASC'}"
-        return f"PRIMARY KEY"
+        return "PRIMARY KEY"
 
     def uniquecolumnconstraint_sql(self, expression: exp.UniqueColumnConstraint) -> str:
         this = self.sql(expression, "this")
@@ -873,8 +867,7 @@ class Generator:
         return f"DESCRIBE {self.sql(expression, 'this')}"
 
     def prepend_ctes(self, expression: exp.Expression, sql: str) -> str:
-        with_ = self.sql(expression, "with")
-        if with_:
+        if with_ := self.sql(expression, "with"):
             sql = f"{with_}{self.sep()}{sql}"
         return sql
 
@@ -928,11 +921,7 @@ class Generator:
             escape = f" UESCAPE {self.sql(escape)}" if escape else ""
             return f"{self.dialect.UNICODE_START}{this}{self.dialect.UNICODE_END}{escape}"
 
-        if escape:
-            pattern = re.compile(rf"{escape.name}(\d+)")
-        else:
-            pattern = ESCAPED_UNICODE_RE
-
+        pattern = re.compile(rf"{escape.name}(\d+)") if escape else ESCAPED_UNICODE_RE
         this = pattern.sub(r"\\u\1", this)
         return f"{self.dialect.QUOTE_START}{this}{self.dialect.QUOTE_END}"
 
@@ -1131,8 +1120,7 @@ class Generator:
         wrapped: bool = True,
     ) -> str:
         if properties.expressions:
-            expressions = self.expressions(properties, sep=sep, indent=False)
-            if expressions:
+            if expressions := self.expressions(properties, sep=sep, indent=False):
                 expressions = self.wrap(expressions) if wrapped else expressions
                 return f"{prefix}{' ' if prefix.strip() else ''}{expressions}{suffix}"
         return ""
@@ -1452,8 +1440,7 @@ class Generator:
             ordinality = f" WITH ORDINALITY{alias}"
             alias = ""
 
-        when = self.sql(expression, "when")
-        if when:
+        if when := self.sql(expression, "when"):
             table = f"{table} {when}"
 
         return f"{table}{version}{file_format}{alias}{hints}{pivots}{joins}{laterals}{ordinality}"
@@ -1613,16 +1600,14 @@ class Generator:
         cube = expression.args.get("cube", [])
         if seq_get(cube, 0) is True:
             return f"{group_by}{self.seg('WITH CUBE')}"
-        else:
-            cube_sql = self.expressions(expression, key="cube", indent=False)
-            cube_sql = f"{self.seg('CUBE')} {self.wrap(cube_sql)}" if cube_sql else ""
+        cube_sql = self.expressions(expression, key="cube", indent=False)
+        cube_sql = f"{self.seg('CUBE')} {self.wrap(cube_sql)}" if cube_sql else ""
 
         rollup = expression.args.get("rollup", [])
         if seq_get(rollup, 0) is True:
             return f"{group_by}{self.seg('WITH ROLLUP')}"
-        else:
-            rollup_sql = self.expressions(expression, key="rollup", indent=False)
-            rollup_sql = f"{self.seg('ROLLUP')} {self.wrap(rollup_sql)}" if rollup_sql else ""
+        rollup_sql = self.expressions(expression, key="rollup", indent=False)
+        rollup_sql = f"{self.seg('ROLLUP')} {self.wrap(rollup_sql)}" if rollup_sql else ""
 
         groupings = csv(
             grouping_sets,
@@ -1679,10 +1664,7 @@ class Generator:
         if on_sql:
             on_sql = self.indent(on_sql, skip_first=True)
             space = self.seg(" " * self.pad) if self.pretty else " "
-            if using:
-                on_sql = f"{space}USING ({on_sql})"
-            else:
-                on_sql = f"{space}ON {on_sql}"
+            on_sql = f"{space}USING ({on_sql})" if using else f"{space}ON {on_sql}"
         elif not op_sql:
             return f", {this_sql}"
 
@@ -2069,8 +2051,8 @@ class Generator:
         alias = expression.args.get("alias")
         offset = expression.args.get("offset")
 
-        if self.UNNEST_WITH_ORDINALITY:
-            if alias and isinstance(offset, exp.Expression):
+        if alias and isinstance(offset, exp.Expression):
+            if self.UNNEST_WITH_ORDINALITY:
                 alias.append("columns", offset)
 
         if alias and self.dialect.UNNEST_COLUMN_ONLY:
@@ -2082,13 +2064,12 @@ class Generator:
         alias = f" AS {alias}" if alias else alias
         if self.UNNEST_WITH_ORDINALITY:
             suffix = f" WITH ORDINALITY{alias}" if offset else alias
+        elif isinstance(offset, exp.Expression):
+            suffix = f"{alias} WITH OFFSET AS {self.sql(offset)}"
+        elif offset:
+            suffix = f"{alias} WITH OFFSET"
         else:
-            if isinstance(offset, exp.Expression):
-                suffix = f"{alias} WITH OFFSET AS {self.sql(offset)}"
-            elif offset:
-                suffix = f"{alias} WITH OFFSET"
-            else:
-                suffix = alias
+            suffix = alias
 
         return f"UNNEST({args}){suffix}"
 
@@ -2172,9 +2153,7 @@ class Generator:
             statements.append(f"WHEN {self.sql(e, 'this')}")
             statements.append(f"THEN {self.sql(e, 'true')}")
 
-        default = self.sql(expression, "default")
-
-        if default:
+        if default := self.sql(expression, "default"):
             statements.append(f"ELSE {default}")
 
         statements.append("END")
@@ -2315,9 +2294,7 @@ class Generator:
     def jsoncolumndef_sql(self, expression: exp.JSONColumnDef) -> str:
         path = self.sql(expression, "path")
         path = f" PATH {path}" if path else ""
-        nested_schema = self.sql(expression, "nested_schema")
-
-        if nested_schema:
+        if nested_schema := self.sql(expression, "nested_schema"):
             return f"NESTED{path} {nested_schema}"
 
         this = self.sql(expression, "this")
@@ -2553,16 +2530,14 @@ class Generator:
     def altercolumn_sql(self, expression: exp.AlterColumn) -> str:
         this = self.sql(expression, "this")
 
-        dtype = self.sql(expression, "dtype")
-        if dtype:
+        if dtype := self.sql(expression, "dtype"):
             collate = self.sql(expression, "collate")
             collate = f" COLLATE {collate}" if collate else ""
             using = self.sql(expression, "using")
             using = f" USING {using}" if using else ""
             return f"ALTER COLUMN {this} SET DATA TYPE {dtype}{collate}{using}"
 
-        default = self.sql(expression, "default")
-        if default:
+        if default := self.sql(expression, "default"):
             return f"ALTER COLUMN {this} SET DEFAULT {default}"
 
         if not expression.args.get("drop"):
@@ -2779,8 +2754,7 @@ class Generator:
             arg_value = expression.args.get(key)
 
             if isinstance(arg_value, list):
-                for value in arg_value:
-                    args.append(value)
+                args.extend(iter(arg_value))
             elif arg_value is not None:
                 args.append(arg_value)
 
@@ -2976,9 +2950,7 @@ class Generator:
 
     def anyvalue_sql(self, expression: exp.AnyValue) -> str:
         this = self.sql(expression, "this")
-        having = self.sql(expression, "having")
-
-        if having:
+        if having := self.sql(expression, "having"):
             this = f"{this} HAVING {'MAX' if expression.args.get('max') else 'MIN'} {having}"
 
         return self.func("ANY_VALUE", this)
@@ -2999,32 +2971,26 @@ class Generator:
         return f"{transform}{row_format_before}{record_writer}{using}{schema}{row_format_after}{record_reader}"
 
     def indexconstraintoption_sql(self, expression: exp.IndexConstraintOption) -> str:
-        key_block_size = self.sql(expression, "key_block_size")
-        if key_block_size:
+        if key_block_size := self.sql(expression, "key_block_size"):
             return f"KEY_BLOCK_SIZE = {key_block_size}"
 
-        using = self.sql(expression, "using")
-        if using:
+        if using := self.sql(expression, "using"):
             return f"USING {using}"
 
-        parser = self.sql(expression, "parser")
-        if parser:
+        if parser := self.sql(expression, "parser"):
             return f"WITH PARSER {parser}"
 
-        comment = self.sql(expression, "comment")
-        if comment:
+        if comment := self.sql(expression, "comment"):
             return f"COMMENT {comment}"
 
         visible = expression.args.get("visible")
         if visible is not None:
             return "VISIBLE" if visible else "INVISIBLE"
 
-        engine_attr = self.sql(expression, "engine_attr")
-        if engine_attr:
+        if engine_attr := self.sql(expression, "engine_attr"):
             return f"ENGINE_ATTRIBUTE = {engine_attr}"
 
-        secondary_engine_attr = self.sql(expression, "secondary_engine_attr")
-        if secondary_engine_attr:
+        if secondary_engine_attr := self.sql(expression, "secondary_engine_attr"):
             return f"SECONDARY_ENGINE_ATTRIBUTE = {secondary_engine_attr}"
 
         self.unsupported("Unsupported index constraint option.")
@@ -3052,8 +3018,7 @@ class Generator:
             expression.args["true"],
             copy=False,
         )
-        else_cond = expression.args.get("false")
-        if else_cond:
+        if else_cond := expression.args.get("false"):
             case.else_(else_cond, copy=False)
 
         return self.sql(case)

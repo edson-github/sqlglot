@@ -159,7 +159,7 @@ class AbstractMappingSchema:
     def find(
         self, table: exp.Table, trie: t.Optional[t.Dict] = None, raise_on_missing: bool = True
     ) -> t.Optional[t.Any]:
-        parts = self.table_parts(table)[0 : len(self.supported_table_args)]
+        parts = self.table_parts(table)[:len(self.supported_table_args)]
         value, trie = in_trie(self.mapping_trie if trie is None else trie, parts)
 
         if value == TrieResult.FAILED:
@@ -315,8 +315,7 @@ class MappingSchema(AbstractMappingSchema, Schema):
             column if isinstance(column, str) else column.this, dialect=dialect, normalize=normalize
         )
 
-        table_schema = self.find(normalized_table, raise_on_missing=False)
-        if table_schema:
+        if table_schema := self.find(normalized_table, raise_on_missing=False):
             column_type = table_schema.get(normalized_column_name)
 
             if isinstance(column_type, exp.DataType):
@@ -553,10 +552,6 @@ def nested_set(d: t.Dict, keys: t.Sequence[str], value: t.Any) -> t.Dict:
 
     subd = d
     for key in keys[:-1]:
-        if key not in subd:
-            subd = subd.setdefault(key, {})
-        else:
-            subd = subd[key]
-
+        subd = subd.setdefault(key, {}) if key not in subd else subd[key]
     subd[keys[-1]] = value
     return d

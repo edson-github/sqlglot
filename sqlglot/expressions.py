@@ -152,9 +152,7 @@ class Expression(metaclass=_Expression):
             return field
         if isinstance(field, (Identifier, Literal, Var)):
             return field.this
-        if isinstance(field, (Star, Null)):
-            return field.name
-        return ""
+        return field.name if isinstance(field, (Star, Null)) else ""
 
     @property
     def is_string(self) -> bool:
@@ -199,10 +197,10 @@ class Expression(metaclass=_Expression):
 
     @property
     def alias_column_names(self) -> t.List[str]:
-        table_alias = self.args.get("alias")
-        if not table_alias:
+        if table_alias := self.args.get("alias"):
+            return [c.name for c in table_alias.args.get("columns") or []]
+        else:
             return []
-        return [c.name for c in table_alias.args.get("columns") or []]
 
     @property
     def name(self) -> str:
@@ -329,9 +327,7 @@ class Expression(metaclass=_Expression):
         """
         Returns the depth of this tree.
         """
-        if self.parent:
-            return self.parent.depth + 1
-        return 0
+        return self.parent.depth + 1 if self.parent else 0
 
     def iter_expressions(self) -> t.Iterator[t.Tuple[str, Expression]]:
         """Yields the key and expression for all arguments, exploding list args."""
@@ -340,9 +336,8 @@ class Expression(metaclass=_Expression):
                 for v in vs:
                     if hasattr(v, "parent"):
                         yield k, v
-            else:
-                if hasattr(vs, "parent"):
-                    yield k, vs
+            elif hasattr(vs, "parent"):
+                yield k, vs
 
     def find(self, *expression_types: t.Type[E], bfs: bool = True) -> t.Optional[E]:
         """
@@ -477,9 +472,7 @@ class Expression(metaclass=_Expression):
         """
         Returns the inner expression if this is an Alias.
         """
-        if isinstance(self, Alias):
-            return self.this
-        return self
+        return self.this if isinstance(self, Alias) else self
 
     def unnest_operands(self):
         """
@@ -493,8 +486,8 @@ class Expression(metaclass=_Expression):
 
         A AND B AND C -> [A, B, C]
         """
-        for node, _, _ in self.dfs(prune=lambda n, p, *_: p and not type(n) is self.__class__):
-            if not type(node) is self.__class__:
+        for node, _, _ in self.dfs(prune=lambda n, p, *_: p and type(n) is not self.__class__):
+            if type(node) is not self.__class__:
                 yield node.unnest() if unnest and not isinstance(node, Subquery) else node
 
     def __str__(self) -> str:
@@ -619,11 +612,11 @@ class Expression(metaclass=_Expression):
         Returns:
             A list of error messages for all possible errors that were found.
         """
-        errors: t.List[str] = []
-
-        for k in self.args:
-            if k not in self.arg_types:
-                errors.append(f"Unexpected keyword: '{k}' for {self.__class__}")
+        errors: t.List[str] = [
+            f"Unexpected keyword: '{k}' for {self.__class__}"
+            for k in self.args
+            if k not in self.arg_types
+        ]
         for k, mandatory in self.arg_types.items():
             v = self.args.get(k)
             if mandatory and (v is None or (isinstance(v, list) and not v)):
@@ -1010,9 +1003,7 @@ class DDL(Expression):
     @property
     def ctes(self):
         with_ = self.args.get("with")
-        if not with_:
-            return []
-        return with_.expressions
+        return [] if not with_ else with_.expressions
 
     @property
     def named_selects(self) -> t.List[str]:
@@ -2335,8 +2326,7 @@ class Properties(Expression):
     def from_dict(cls, properties_dict: t.Dict) -> Properties:
         expressions = []
         for key, value in properties_dict.items():
-            property_cls = cls.NAME_TO_PROPERTY.get(key.upper())
-            if property_cls:
+            if property_cls := cls.NAME_TO_PROPERTY.get(key.upper()):
                 expressions.append(property_cls(this=convert(value)))
             else:
                 expressions.append(Property(this=Literal.string(key), value=convert(value)))
@@ -2417,9 +2407,7 @@ class Subqueryable(Unionable):
     @property
     def ctes(self):
         with_ = self.args.get("with")
-        if not with_:
-            return []
-        return with_.expressions
+        return [] if not with_ else with_.expressions
 
     @property
     def selects(self) -> t.List[Expression]:
@@ -2535,9 +2523,7 @@ class Table(Expression):
 
     @property
     def name(self) -> str:
-        if isinstance(self.this, Func):
-            return ""
-        return self.this.name
+        return "" if isinstance(self.this, Func) else self.this.name
 
     @property
     def db(self) -> str:
@@ -2572,9 +2558,8 @@ class Table(Expression):
 
     def to_column(self, copy: bool = True) -> Alias | Column | Dot:
         parts = self.parts
-        col = column(*reversed(parts[0:4]), *parts[4:], copy=copy)  # type: ignore
-        alias = self.args.get("alias")
-        if alias:
+        col = column(*reversed(parts[:4]), *parts[4:], copy=copy)
+        if alias := self.args.get("alias"):
             col = alias_(col, alias.this, copy=copy)
         return col
 
@@ -3925,10 +3910,10 @@ class Dot(Binary):
         return self.name
 
     @classmethod
-    def build(self, expressions: t.Sequence[Expression]) -> Dot:
+    def build(cls, expressions: t.Sequence[Expression]) -> Dot:
         """Build a Dot object with a sequence of expressions."""
         if len(expressions) < 2:
-            raise ValueError(f"Dot requires >= 2 expressions.")
+            raise ValueError("Dot requires >= 2 expressions.")
 
         return t.cast(Dot, reduce(lambda x, y: Dot(this=x, expression=y), expressions))
 
@@ -5390,12 +5375,9 @@ def maybe_parse(
         Expression: the parsed or given expression.
     """
     if isinstance(sql_or_expression, Expression):
-        if copy:
-            return sql_or_expression.copy()
-        return sql_or_expression
-
+        return sql_or_expression.copy() if copy else sql_or_expression
     if sql_or_expression is None:
-        raise ParseError(f"SQL cannot be None")
+        raise ParseError("SQL cannot be None")
 
     import sqlglot
 
@@ -6109,15 +6091,13 @@ def to_interval(interval: str | Literal) -> Interval:
 
         interval = interval.this
 
-    interval_parts = INTERVAL_STRING_RE.match(interval)  # type: ignore
-
-    if not interval_parts:
+    if interval_parts := INTERVAL_STRING_RE.match(interval):
+        return Interval(
+            this=Literal.string(interval_parts.group(1)),
+            unit=Var(this=interval_parts.group(2).upper()),
+        )
+    else:
         raise ValueError("Invalid interval string.")
-
-    return Interval(
-        this=Literal.string(interval_parts.group(1)),
-        unit=Var(this=interval_parts.group(2).upper()),
-    )
 
 
 @t.overload
@@ -6529,17 +6509,15 @@ def table_name(table: Table | str, dialect: DialectType = None, identify: bool =
         The table name.
     """
 
-    table = maybe_parse(table, into=Table, dialect=dialect)
-
-    if not table:
+    if table := maybe_parse(table, into=Table, dialect=dialect):
+        return ".".join(
+            part.sql(dialect=dialect, identify=True, copy=False)
+            if identify or not SAFE_IDENTIFIER_RE.match(part.name)
+            else part.name
+            for part in table.parts
+        )
+    else:
         raise ValueError(f"Cannot parse {table}")
-
-    return ".".join(
-        part.sql(dialect=dialect, identify=True, copy=False)
-        if identify or not SAFE_IDENTIFIER_RE.match(part.name)
-        else part.name
-        for part in table.parts
-    )
 
 
 def normalize_table_name(table: str | Table, dialect: DialectType = None, copy: bool = True) -> str:
@@ -6714,24 +6692,22 @@ def func(name: str, *args, copy: bool = True, dialect: DialectType = None, **kwa
     converted: t.List[Expression] = [maybe_parse(arg, dialect=dialect, copy=copy) for arg in args]
     kwargs = {key: maybe_parse(value, dialect=dialect, copy=copy) for key, value in kwargs.items()}
 
-    constructor = dialect.parser_class.FUNCTIONS.get(name.upper())
-    if constructor:
+    if constructor := dialect.parser_class.FUNCTIONS.get(name.upper()):
         if converted:
-            if "dialect" in constructor.__code__.co_varnames:
-                function = constructor(converted, dialect=dialect)
-            else:
-                function = constructor(converted)
+            function = (
+                constructor(converted, dialect=dialect)
+                if "dialect" in constructor.__code__.co_varnames
+                else constructor(converted)
+            )
         elif constructor.__name__ == "from_arg_list":
             function = constructor.__self__(**kwargs)  # type: ignore
+        elif constructor := FUNCTION_BY_NAME.get(name.upper()):
+            function = constructor(**kwargs)
         else:
-            constructor = FUNCTION_BY_NAME.get(name.upper())
-            if constructor:
-                function = constructor(**kwargs)
-            else:
-                raise ValueError(
-                    f"Unable to convert '{name}' into a Func. Either manually construct "
-                    "the Func expression of interest or parse the function call."
-                )
+            raise ValueError(
+                f"Unable to convert '{name}' into a Func. Either manually construct "
+                "the Func expression of interest or parse the function call."
+            )
     else:
         kwargs = kwargs or {"expressions": converted}
         function = Anonymous(this=name, **kwargs)
@@ -6756,10 +6732,7 @@ def case(
         expression: Optionally, the input expression (not all dialects support this)
         **opts: Extra keyword arguments for parsing `expression`
     """
-    if expression is not None:
-        this = maybe_parse(expression, **opts)
-    else:
-        this = None
+    this = maybe_parse(expression, **opts) if expression is not None else None
     return Case(this=this, ifs=[])
 
 
@@ -6779,9 +6752,7 @@ def cast_unless(
         **opts: Extra keyword arguments for parsing `expression`
     """
     expr = maybe_parse(expression, **opts)
-    if expr.is_type(*types):
-        return expr
-    return cast(expr, to, **opts)
+    return expr if expr.is_type(*types) else cast(expr, to, **opts)
 
 
 def true() -> Boolean:

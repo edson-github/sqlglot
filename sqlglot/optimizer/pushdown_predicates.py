@@ -20,15 +20,12 @@ def pushdown_predicates(expression, dialect=None):
     Returns:
         sqlglot.Expression: optimized expression
     """
-    root = build_scope(expression)
-
-    if root:
+    if root := build_scope(expression):
         scope_ref_count = root.ref_count()
 
         for scope in reversed(list(root.traverse())):
             select = scope.expression
-            where = select.args.get("where")
-            if where:
+            if where := select.args.get("where"):
                 selected_sources = scope.selected_sources
                 # a right join can only push down to itself and not the source FROM table
                 for k, (node, source) in selected_sources.items():

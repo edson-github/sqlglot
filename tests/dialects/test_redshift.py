@@ -376,8 +376,10 @@ ORDER BY
     def test_values(self):
         # Test crazy-sized VALUES clause to UNION ALL conversion to ensure we don't get RecursionError
         values = [str(v) for v in range(0, 10000)]
-        values_query = f"SELECT * FROM (VALUES {', '.join('(' + v + ')' for v in values)})"
-        union_query = f"SELECT * FROM ({' UNION ALL '.join('SELECT ' + v for v in values)})"
+        values_query = f"SELECT * FROM (VALUES {', '.join(f'({v})' for v in values)})"
+        union_query = (
+            f"SELECT * FROM ({' UNION ALL '.join(f'SELECT {v}' for v in values)})"
+        )
         self.assertEqual(transpile(values_query, write="redshift")[0], union_query)
 
         self.validate_identity(

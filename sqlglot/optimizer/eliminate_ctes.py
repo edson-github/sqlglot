@@ -17,9 +17,7 @@ def eliminate_ctes(expression):
     Returns:
         sqlglot.Expression: optimized expression
     """
-    root = build_scope(expression)
-
-    if root:
+    if root := build_scope(expression):
         ref_count = root.ref_count()
 
         # Traverse the scope tree in reverse so we can remove chains of unused CTEs

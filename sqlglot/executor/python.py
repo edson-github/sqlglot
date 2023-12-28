@@ -177,8 +177,7 @@ class PythonExecutor:
                     for name, column_range in column_ranges.items()
                 }
             )
-            condition = self.generate(join["condition"])
-            if condition:
+            if condition := self.generate(join["condition"]):
                 source_context.filter(condition)
 
         if not step.condition and not step.projections:
@@ -320,7 +319,7 @@ class PythonExecutor:
         sort_ctx.sort(self.generate_tuple(step.key))
 
         if not math.isinf(step.limit):
-            sort_ctx.table.rows = sort_ctx.table.rows[0 : step.limit]
+            sort_ctx.table.rows = sort_ctx.table.rows[:step.limit]
 
         output = Table(
             projection_columns,
@@ -344,7 +343,7 @@ class PythonExecutor:
             sink.rows = left.rows + right.rows
 
         if not math.isinf(step.limit):
-            sink.rows = sink.rows[0 : step.limit]
+            sink.rows = sink.rows[:step.limit]
 
         return self.context({step.name: sink})
 

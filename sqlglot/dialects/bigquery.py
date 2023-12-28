@@ -89,12 +89,11 @@ def _unqualify_unnest(expression: exp.Expression) -> exp.Expression:
     from sqlglot.optimizer.scope import find_all_in_scope
 
     if isinstance(expression, exp.Select):
-        unnest_aliases = {
+        if unnest_aliases := {
             unnest.alias
             for unnest in find_all_in_scope(expression, exp.Unnest)
             if isinstance(unnest.parent, (exp.From, exp.Join))
-        }
-        if unnest_aliases:
+        }:
             for column in expression.find_all(exp.Column):
                 if column.table in unnest_aliases:
                     column.set("table", None)
@@ -124,9 +123,7 @@ def _alias_ordered_group(expression: exp.Expression) -> exp.Expression:
             }
 
             for e in group.expressions:
-                alias = aliases.get(e)
-
-                if alias:
+                if alias := aliases.get(e):
                     e.replace(exp.column(alias))
 
     return expression

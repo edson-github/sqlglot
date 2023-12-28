@@ -299,18 +299,16 @@ class Scope:
     @property
     def references(self) -> t.List[t.Tuple[str, exp.Expression]]:
         if self._references is None:
-            self._references = []
-
-            for table in self.tables:
-                self._references.append((table.alias_or_name, table))
-            for expression in itertools.chain(self.derived_tables, self.udtfs):
-                self._references.append(
-                    (
-                        expression.alias,
-                        expression if expression.args.get("pivots") else expression.unnest(),
-                    )
+            self._references = [(table.alias_or_name, table) for table in self.tables]
+            self._references.extend(
+                (
+                    expression.alias,
+                    expression
+                    if expression.args.get("pivots")
+                    else expression.unnest(),
                 )
-
+                for expression in itertools.chain(self.derived_tables, self.udtfs)
+            )
         return self._references
 
     @property
@@ -346,9 +344,7 @@ class Scope:
         Returns:
             list[exp.JoinHint]: Join hints that are referenced within the scope
         """
-        if self._join_hints is None:
-            return []
-        return self._join_hints
+        return [] if self._join_hints is None else self._join_hints
 
     @property
     def pivots(self):
@@ -497,10 +493,7 @@ def build_scope(expression: exp.Expression) -> t.Optional[Scope]:
     Returns:
         Scope: root scope
     """
-    scopes = traverse_scope(expression)
-    if scopes:
-        return scopes[-1]
-    return None
+    return scopes[-1] if (scopes := traverse_scope(expression)) else None
 
 
 def _traverse_scope(scope):
@@ -539,13 +532,13 @@ def _traverse_union(scope):
 
     # The last scope to be yield should be the top most scope
     left = None
-    for left in _traverse_scope(scope.branch(scope.expression.left, scope_type=ScopeType.UNION)):
-        yield left
-
+    yield from _traverse_scope(
+        scope.branch(scope.expression.left, scope_type=ScopeType.UNION)
+    )
     right = None
-    for right in _traverse_scope(scope.branch(scope.expression.right, scope_type=ScopeType.UNION)):
-        yield right
-
+    yield from _traverse_scope(
+        scope.branch(scope.expression.right, scope_type=ScopeType.UNION)
+    )
     scope.union_scopes = [left, right]
 
 
@@ -605,13 +598,12 @@ def _traverse_tables(scope):
 
     # Traverse FROMs, JOINs, and LATERALs in the order they are defined
     expressions = []
-    from_ = scope.expression.args.get("from")
-    if from_:
+    if from_ := scope.expression.args.get("from"):
         expressions.append(from_.this)
 
-    for join in scope.expression.args.get("joins") or []:
-        expressions.append(join.this)
-
+    expressions.extend(
+        join.this for join in scope.expression.args.get("joins") or []
+    )
     if isinstance(scope.expression, exp.Table):
         expressions.append(scope.expression)
 
@@ -623,10 +615,7 @@ def _traverse_tables(scope):
             source_name = expression.alias_or_name
 
             if table_name in scope.sources and not expression.db:
-                # This is a reference to a parent source (e.g. a CTE), not an actual table, unless
-                # it is pivoted, because then we get back a new table and hence a new source.
-                pivots = expression.args.get("pivots")
-                if pivots:
+                if pivots := expression.args.get("pivots"):
                     sources[pivots[0].alias] = expression
                 else:
                     sources[source_name] = scope.sources[table_name]

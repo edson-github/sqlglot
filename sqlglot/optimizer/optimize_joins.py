@@ -23,9 +23,7 @@ def optimize_joins(expression):
         cross_joins = []
 
         for join in select.args.get("joins", []):
-            tables = other_table_names(join)
-
-            if tables:
+            if tables := other_table_names(join):
                 for table in tables:
                     references[table] = references.get(table, []) + [join]
             else:

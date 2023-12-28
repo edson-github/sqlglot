@@ -51,9 +51,7 @@ def _date_delta_sql(self: DuckDB.Generator, expression: exp.DateAdd | exp.DateSu
 # BigQuery -> DuckDB conversion for the DATE function
 def _date_sql(self: DuckDB.Generator, expression: exp.Date) -> str:
     result = f"CAST({self.sql(expression, 'this')} AS DATE)"
-    zone = self.sql(expression, "zone")
-
-    if zone:
+    if zone := self.sql(expression, "zone"):
         date_str = self.func("STRFTIME", result, "'%d/%m/%Y'")
         date_str = f"{date_str} || ' ' || {zone}"
 

@@ -194,9 +194,7 @@ class Column:
 
         if isinstance(value, cls):
             value = value.expression
-        if not isinstance(value, exp.Literal):
-            return lit(value)
-        return Column(value)
+        return lit(value) if not isinstance(value, exp.Literal) else Column(value)
 
     def copy(self) -> Column:
         return Column(self.expression.copy())

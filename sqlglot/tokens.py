@@ -942,14 +942,14 @@ class Tokenizer(metaclass=_Tokenizer):
             while current < self.size:
                 char = self.sql[current]
 
-                if char.isspace() and (char == " " or char == "\t"):
+                if char.isspace() and char in [" ", "\t"]:
                     current += 1
                 else:
                     break
 
             n = current - self._current
             self._start = current
-            self._advance(n if n > 1 else 1)
+            self._advance(max(n, 1))
 
             if self._char is None:
                 break
@@ -1019,9 +1019,7 @@ class Tokenizer(metaclass=_Tokenizer):
 
     def peek(self, i: int = 0) -> str:
         i = self._current + i
-        if i < self.size:
-            return self.sql[i]
-        return ""
+        return self.sql[i] if i < self.size else ""
 
     def _add(self, token_type: TokenType, text: t.Optional[str] = None) -> None:
         self._prev_token_line = self._line
@@ -1054,8 +1052,7 @@ class Tokenizer(metaclass=_Tokenizer):
             tokens = len(self.tokens)
             self._scan(lambda: self._peek == ";")
             self.tokens = self.tokens[:tokens]
-            text = self.sql[start : self._current].strip()
-            if text:
+            if text := self.sql[start : self._current].strip():
                 self._add(TokenType.STRING, text)
 
     def _scan_keywords(self) -> None:
@@ -1122,9 +1119,7 @@ class Tokenizer(metaclass=_Tokenizer):
 
         comment_start_line = self._line
         comment_start_size = len(comment_start)
-        comment_end = self._COMMENTS[comment_start]
-
-        if comment_end:
+        if comment_end := self._COMMENTS[comment_start]:
             # Skip the comment's start delimiter
             self._advance(comment_start_size)
 
@@ -1135,7 +1130,10 @@ class Tokenizer(metaclass=_Tokenizer):
             self._comments.append(self._text[comment_start_size : -comment_end_size + 1])
             self._advance(comment_end_size - 1)
         else:
-            while not self._end and not self.WHITE_SPACE.get(self._peek) is TokenType.BREAK:
+            while (
+                not self._end
+                and self.WHITE_SPACE.get(self._peek) is not TokenType.BREAK
+            ):
                 self._advance(alnum=True)
             self._comments.append(self._text[comment_start_size:])
 
@@ -1164,11 +1162,10 @@ class Tokenizer(metaclass=_Tokenizer):
                 self._advance()
             elif self._peek == "." and not decimal:
                 after = self.peek(1)
-                if after.isdigit() or not after.isalpha():
-                    decimal = True
-                    self._advance()
-                else:
+                if not after.isdigit() and after.isalpha():
                     return self._add(TokenType.VAR)
+                decimal = True
+                self._advance()
             elif self._peek in ("-", "+") and scientific == 1:
                 scientific += 1
                 self._advance()
@@ -1183,9 +1180,9 @@ class Tokenizer(metaclass=_Tokenizer):
                     literal += self._peek
                     self._advance()
 
-                token_type = self.KEYWORDS.get(self.NUMERIC_LITERALS.get(literal.upper(), ""))
-
-                if token_type:
+                if token_type := self.KEYWORDS.get(
+                    self.NUMERIC_LITERALS.get(literal.upper(), "")
+                ):
                     self._add(TokenType.NUMBER, number_text)
                     self._add(TokenType.DCOLON, "::")
                     return self._add(token_type, literal)
@@ -1291,11 +1288,7 @@ class Tokenizer(metaclass=_Tokenizer):
                 and (self._peek == delimiter or self._peek in escapes)
                 and (self._char not in self._QUOTES or self._char == self._peek)
             ):
-                if self._peek == delimiter:
-                    text += self._peek
-                else:
-                    text += self._char + self._peek
-
+                text += self._peek if self._peek == delimiter else self._char + self._peek
                 if self._current + 1 < self.size:
                     self._advance(2)
                 else:
@@ -1314,8 +1307,9 @@ class Tokenizer(metaclass=_Tokenizer):
                     and self._peek
                     and self._char in self.STRING_ESCAPES
                 ):
-                    escaped_sequence = self.dialect.ESCAPE_SEQUENCES.get(self._char + self._peek)
-                    if escaped_sequence:
+                    if escaped_sequence := self.dialect.ESCAPE_SEQUENCES.get(
+                        self._char + self._peek
+                    ):
                         self._advance(2)
                         text += escaped_sequence
                         continue

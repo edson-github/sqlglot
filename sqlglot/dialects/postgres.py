@@ -118,9 +118,7 @@ def _datatype_sql(self: Postgres.Generator, expression: exp.DataType) -> str:
 
 
 def _auto_increment_to_serial(expression: exp.Expression) -> exp.Expression:
-    auto = expression.find(exp.AutoIncrementColumnConstraint)
-
-    if auto:
+    if auto := expression.find(exp.AutoIncrementColumnConstraint):
         expression.args["constraints"].remove(auto.parent)
         kind = expression.args["kind"]
 

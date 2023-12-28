@@ -28,9 +28,7 @@ from sqlglot.tokens import TokenType
 
 
 def _check_int(s: str) -> bool:
-    if s[0] in ("-", "+"):
-        return s[1:].isdigit()
-    return s.isdigit()
+    return s[1:].isdigit() if s[0] in ("-", "+") else s.isdigit()
 
 
 # from https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html
@@ -379,9 +377,10 @@ class Snowflake(Dialect):
                     and self._match_texts(self.HISTORICAL_DATA_KIND)
                     and self._prev.text.upper()
                 )
-                expression = self._match(TokenType.FARROW) and self._parse_bitwise()
-
-                if expression:
+                if (
+                    expression := self._match(TokenType.FARROW)
+                    and self._parse_bitwise()
+                ):
                     self._match_r_paren()
                     when = self.expression(
                         exp.HistoricalData, this=this, kind=kind, expression=expression

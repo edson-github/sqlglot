@@ -35,15 +35,7 @@ def eliminate_subqueries(expression):
     if not root:
         return expression
 
-    # Map of alias->Scope|Table
-    # These are all aliases that are already used in the expression.
-    # We don't want to create new CTEs that conflict with these names.
-    taken = {}
-
-    # All CTE aliases in the root scope are taken
-    for scope in root.cte_scopes:
-        taken[scope.expression.parent.alias] = scope
-
+    taken = {scope.expression.parent.alias: scope for scope in root.cte_scopes}
     # All table names are taken
     for scope in root.traverse():
         taken.update(
@@ -74,8 +66,7 @@ def eliminate_subqueries(expression):
             if scope is cte_scope:
                 # Don't try to eliminate this CTE itself
                 continue
-            new_cte = _eliminate(scope, existing_ctes, taken)
-            if new_cte:
+            if new_cte := _eliminate(scope, existing_ctes, taken):
                 new_ctes.append(new_cte)
 
         # Append the existing CTE itself
@@ -84,8 +75,7 @@ def eliminate_subqueries(expression):
     # Now append the rest
     for scope in itertools.chain(root.union_scopes, root.subquery_scopes, root.table_scopes):
         for child_scope in scope.traverse():
-            new_cte = _eliminate(child_scope, existing_ctes, taken)
-            if new_cte:
+            if new_cte := _eliminate(child_scope, existing_ctes, taken):
                 new_ctes.append(new_cte)
 
     if new_ctes:
